@@ -1,25 +1,98 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Personal Activity Monitoring"
+output: html_document
 ---
 
 
-## Loading and preprocessing the data
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen=5)
+```
 
+### INTRODUCTION
 
+This is the Course Project for Week 2 of the Reproducible Research Course in R. It shows an example of coding with the use of R Markdown for easier documentation.     
+     
+*Taken from Coursera:*     
+This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.     
+     
+The variables included in this dataset are:     
+     
+**steps**: Number of steps taking in a 5-minute interval (missing values are coded as *NA*)     
+**date**: The date on which the measurement was taken in YYYY-MM-DD format     
+**interval**: Identifier for the 5-minute interval in which measurement was taken     
+     
+The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset.     
 
-## What is mean total number of steps taken per day?
+### Loading and preprocessing the data
 
+We have extracted the data and stored it to the *rawData* data frame. Then, we have stored it into the *activityData* data frame. Changing the *date* column to a *Date* data type.
 
+```{r, echo=TRUE}
+unzip("repdata_data_activity.zip")
+rawData <- read.csv("activity.csv")
+activityData <- rawData
+activityData[,2] <- as.Date(activityData[,2], "%Y-%m-%d")
 
-## What is the average daily activity pattern?
+```
 
+### What is mean total number of steps taken per day?
 
+```{r, echo=TRUE}
+histData <- aggregate(.~date, sum, data=activityData[,c(1:2)], na.rm=TRUE)
+with(histData, barplot(steps, names.arg=date, xlab="Date",
+                       ylab="Total Number of Steps",
+                       main="Total Number of Steps per Day"))
+```
 
-## Imputing missing values
+The mean and median total number of steps taken per day are `r mean(histData$steps)` and `r median(histData$steps)`, respectively.
 
+### What is the average daily activity pattern?
 
+```{r, echo=TRUE}
+ts5Data <- aggregate(.~interval, mean, data=activityData[,c(1,3)],
+                     na.rm=TRUE)
+plot(x= ts5Data$interval, y=ts5Data$steps, type="l", xlab="5-minute     interval", ylab="Average Number of Steps", main="Average Number of Steps per 5-minute Interval")
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+On average, the `r ts5Data[ts5Data[,2]==max(ts5Data$steps),1]`th 5-minute interval contains the maximum number of steps.
+
+### Imputing missing values
+
+Our data contains `r sum(is.na(activityData$steps))` *NA*s in the *steps* column, `r sum(is.na(activityData$date))` *NA*s in the *date* column, and `r sum(is.na(activityData$interval))` *NA*s in the *interval* column. Since we do not want *NA*s, we will replace these with the mean for corresponding to that 5-minute interval. We will store this new data set into the *revisedData* dataframe.
+
+```{r, echo=TRUE}
+revisedData <- merge(activityData, ts5Data, by="interval")
+newSteps <- ifelse(is.na(revisedData$steps.x), revisedData$steps.y,
+            revisedData$steps.x)
+revisedData <- cbind(revisedData,newSteps)
+revisedData <- revisedData[,-c(2,4)]
+colnames(revisedData)[3] <- "steps"
+
+histNewData <- aggregate(.~date, sum, data=revisedData[,c(2:3)])
+with(histNewData, barplot(steps, names.arg=date, xlab="Date",
+                       ylab="Total Number of Steps",
+                       main="Total Number of Steps per Day"))
+```
+
+The new mean and median total number of steps taken per day are `r mean(histNewData$steps)` and `r median(histNewData$steps)`, respectively. Comparing the old and new estimates, we can see that there is no difference in the mean. But, we see a slight increase in the median.
+
+### Are there differences in activity patterns between weekdays and weekends?
+
+```{r, echo=TRUE}
+library(plyr)
+y <- mutate(revisedData, Day=weekdays(revisedData$date))
+z <- ifelse(y$Day=="Saturday" | y$Day=="Sunday", "Weekend", "Weekday")
+y <- cbind(y,z)
+y$z <- as.factor(y$z)
+panelData <- aggregate(.~y$interval+y$z, mean, data=y[,c(1,3)])
+Weekday <- panelData[panelData[,2]=="Weekday",]
+Weekend <- panelData[panelData[,2]=="Weekend",]
+par(mfrow=c(2,1), mar=c(0,0,0,0))
+plot(x=Weekend$interval, y=Weekend$steps, type="l", 
+     xlab="5-minute interval", ylab="Average Number of Steps")
+title("Weekend", adj=0.02, line=-1.7)
+plot(x=Weekday$interval, y=Weekday$steps, type="l",
+     xlab="5-minute interval", ylab="Average Number of Steps")
+title("Weekday", adj=0.02, line=-2.7)
+```
